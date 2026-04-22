@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Post {
+  id         String   @id @default(uuid())
+  title      String
+  content    String
+  likesCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  likes      Like[]   // Relacionamento com a tabela de likes
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String   // ID do usuário que deu o like
+  post      Post     @relation(fields: [postId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId]) // ISSO impede que o mesmo user curta o mesmo post 2x
+}

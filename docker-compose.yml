@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: likes_postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 2105
+      POSTGRES_DB: likes_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: likes_redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
