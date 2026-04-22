@@ -1,79 +1,86 @@
-Sistema de Likes Assíncrono de Alta Performance
-Um serviço de backend escalável construído com NestJS, Prisma e BullMQ. Este projeto demonstra como lidar com cenários de alta concorrência como um post viral recebendo milhares de curtidas simultâneas utilizando uma arquitetura de mensageria para garantir a consistência dos dados, a resiliência do sistema e a unicidade de votos por usuário.
+# Social Post Likes API - Desafio Backend
 
-Stack Tecnológica
-Framework: NestJS (TypeScript)
+Esta é uma API robusta desenvolvida em **Node.js** que simula o sistema de curtidas de uma rede social. O foco principal do projeto é a **resiliência sob alta concorrência**, garantindo que o contador de likes permaneça íntegro mesmo com milhares de requisições simultâneas.
 
-ORM: Prisma v6
 
-Banco de Dados: PostgreSQL
+## Tecnologias Utilizadas
 
-Mensageria & Cache: Redis
+* **Framework:** [NestJS](https://nestjs.com/) (TypeScript)
+* **ORM:** [Prisma v6](https://www.prisma.io/)
+* **Banco de Dados:** [PostgreSQL](https://www.postgresql.org/)
+* **Mensageria & Fila:** [Redis](https://redis.io/) + [BullMQ](https://docs.bullmq.io/)
+* **Cache:** [Redis](https://redis.io/)
+* **Documentação:** [Swagger/OpenAPI](https://swagger.io/)
+* **Containerização:** [Docker](https://www.docker.com/)
 
-Gerenciamento de Filas: BullMQ
+---
 
-Documentação: Swagger (OpenAPI)
+## Diferenciais Técnicos
 
-Conteinerização: Docker
+### 1. Consistência sob Concorrência (Fila)
+Utilizamos o **BullMQ** para gerenciar uma fila de processamento de likes. Quando um usuário curte um post, a requisição é enfileirada no Redis e respondida imediatamente. O processamento real no banco de dados ocorre de forma assíncrona e ordenada, evitando *Race Conditions*.
 
-Visão Geral da Arquitetura
-Em vez de realizar atualizações diretas no banco de dados — o que pode levar a Race Conditions e gargalos de conexão este sistema utiliza o padrão Produtor-Consumidor:
+### 2. Regra de Negócio: Like Único
+Implementamos uma restrição de unicidade no banco de dados (`@@unique([userId, postId])`). Isso garante que um mesmo usuário não consiga curtir o mesmo post mais de uma vez, mesmo se enviar múltiplas requisições ao mesmo tempo.
 
-Produtor (API): Quando um usuário curte um post, a requisição é validada e enviada para uma fila no Redis. O usuário recebe um 201 Created em milissegundos.
+### 3. Otimização de Leitura (Cache)
+As rotas de **Listagem de Posts** e **Ranking** utilizam o Redis como camada de cache. Isso reduz drasticamente a carga no PostgreSQL e acelera o tempo de resposta para o usuário final.
 
-Fila (BullMQ): Atua como um buffer, garantindo que nenhum dado seja perdido mesmo sob carga pesada.
+### 4. Documentação Interativa
+A API conta com o **Swagger UI**, permitindo testar todos os endpoints diretamente pelo navegador.
 
-Consumidor (Worker): Um trabalhador assíncrono consome as tarefas e realiza o registro do like e o incremento atômico no PostgreSQL. A lógica de negócio garante que um usuário não possa curtir o mesmo post duas vezes.
+---
 
-Cache de Leitura: As rotas de listagem e ranking utilizam Redis para evitar consultas repetitivas ao banco de dados.
+## Como Executar o Projeto
 
-Como Rodar o Projeto
-1. Pré-requisitos
-Node.js (v18+)
-
-Docker & Docker Compose
-
-2. Configuração do Ambiente
-Crie um arquivo .env na raiz do projeto:
-DATABASE_URL="postgresql://admin:2105@localhost:5433/likes_db?schema=public"
-REDIS_HOST="localhost"
-REDIS_PORT=6379
-
-3. Infraestrutura (Docker)
-Suba o banco de dados e o Redis:
+### 1. Subir a Infraestrutura (Docker)
+```bash
 docker-compose up -d
+```
 
-4. Instalação e Migrations
+### 2. Instalar Dependências e Sincronizar Banco
+```bash
 npm install
 npx prisma generate
 npx prisma migrate dev --name init
+```
 
-5. Iniciando a Aplicação
+### 3. Rodar a Aplicação
+```bash
 npm run start:dev
+```
+A API estará disponível em: `http://localhost:3001`
+A Documentação Swagger em: `http://localhost:3001/api`
 
-Acesse a documentação Swagger em: http://localhost:3001/api
+---
 
-Teste de Estresse
-Para demonstrar a capacidade do sistema, incluí um script de teste que simula 100 requisições simultâneas de usuários diferentes para um único post.
+## Teste de Estresse
 
-  1. Crie um post (via Swagger ou Prisma Studio) para obter um POST_ID válido.
+O projeto inclui um script (`stress-test.js`) que simula **100 usuários diferentes** curtindo o mesmo post simultaneamente.
 
-  2. Atualize a variável POST_ID no arquivo stress-test.js.
+**Para rodar o teste:**
+1. Crie um post via Swagger ou `curl`.
+2. Insira o ID do post no arquivo `stress-test.js`.
+3. Execute: `node stress-test.js`
 
-  3. Execute o teste:
-  npm run ode stress-test.js
+**Resultado esperado:**
+* **API:** 100% de sucesso no recebimento.
+* **Worker:** 100 logs de processamento no terminal do NestJS.
+* **Banco de Dados:** Exatamente 100 novos registros na tabela `Like`.
 
-Resultado Esperado:
-Taxa de Sucesso da API: 100%
+---
 
-Consistência do Banco: O likesCount será exatamente 100, com 100 registros únicos na tabela de Likes. Se o teste for repetido com os mesmos usuários, o contador permanecerá em 100.
+## Endpoints Principais
 
-Por que esta arquitetura?
-Escalabilidade: A API permanece responsiva pois delega operações pesadas para o background.
+| Método | Rota | Descrição |
+| :--- | :--- | :--- |
+| `POST` | `/posts` | Cria um novo post |
+| `GET` | `/posts` | Lista todos os posts (com cache) |
+| `GET` | `/posts/ranking` | Lista os 10 posts mais curtidos (com cache) |
+| `POST` | `/posts/:id/like` | Registra um like para um `userId` específico |
 
-Integridade dos Dados: O uso de restrições de unicidade (@@unique) e filas impede duplicidade e perda de atualizações.
+---
 
-Tolerância a Falhas: Se o banco cair, os likes ficam seguros no Redis e são processados assim que o banco retornar.
-
-Performance de Leitura: O uso de cache no ranking e listagem garante respostas em milissegundos para os endpoints mais acessados.
-
+### Autor
+**Leandro Mattos Santos Neto**
+*Desenvolvedor de Software*
